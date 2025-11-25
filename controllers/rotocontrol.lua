@@ -6,7 +6,7 @@ local obj = {}
 
 obj.name = "Roto-Control"
 obj.id = "rotocontrol"
-obj.channel = 1
+obj.channels = {1}
 obj.ccMap = {
     SYSTEM_MUTE = 1,
     REKORDBOX_PLAY = 2,
@@ -184,7 +184,7 @@ function obj:createConfig()
     return {
         name = obj.name,
         id = obj.id,
-        channel = obj.channel,
+        channels = obj.channels,
         ccHandlers = {
             [obj.ccMap.SYSTEM_VOLUME] = obj.receiveSystemVolume,
             [obj.ccMap.SYSTEM_MUTE] = obj.receiveSystemMute,
