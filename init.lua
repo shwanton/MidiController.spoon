@@ -76,6 +76,42 @@ obj.utils = {
                 handler(table.unpack(args, 1, args.n))
             end)
         end
+    end,
+    --- Midi.utils.resolveChannels(channelConfig) -> table
+    --- Function
+    --- Resolve a channel configuration to a table of channel numbers
+    ---
+    --- Parameters:
+    ---  * channelConfig - Either "all", a single number, or a table of numbers
+    ---
+    --- Returns:
+    ---  * A table of channel numbers (1-16)
+    resolveChannels = function(channelConfig)
+        if channelConfig == "all" then
+            return {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16}
+        elseif type(channelConfig) == "table" then
+            return channelConfig
+        else
+            return {1} -- default to channel 1
+        end
+    end,
+    --- Midi.utils.channelAllowed(channel, allowedChannels) -> boolean
+    --- Function
+    --- Check if a channel is in the allowed channels list
+    ---
+    --- Parameters:
+    ---  * channel - The channel number to check (1-16)
+    ---  * allowedChannels - A table of allowed channel numbers
+    ---
+    --- Returns:
+    ---  * true if the channel is allowed, false otherwise
+    channelAllowed = function(channel, allowedChannels)
+        for _, allowedChannel in ipairs(allowedChannels) do
+            if channel == allowedChannel then
+                return true
+            end
+        end
+        return false
     end
 }
 
@@ -123,15 +159,32 @@ end
 --- Returns:
 ---  * Void
 function obj:_handleControlChange(midiMessage, config)
-    if midiMessage.channel ~= (config.channel) then
-        self.logger.e("Channel does not match config channel")
+    local handlerEntry = config.ccHandlers[midiMessage.ccNumber]
+    if not handlerEntry then
         return
     end
 
-    local ccHandler = config.ccHandlers[midiMessage.ccNumber]
-    if ccHandler then
-        ccHandler(self, midiMessage.ccValue)
+    -- Determine the handler function and allowed channels
+    local handler, allowedChannels
+    if type(handlerEntry) == "function" then
+        -- Simple handler: use controller's default channels
+        handler = handlerEntry
+        allowedChannels = config._channels
+    else
+        -- Handler with channel override: { handler = func, channels = {...} }
+        handler = handlerEntry.handler
+        allowedChannels = handlerEntry.channels
+            and self.utils.resolveChannels(handlerEntry.channels)
+            or config._channels
     end
+
+    -- Check if the message channel is allowed
+    if not self.utils.channelAllowed(midiMessage.channel, allowedChannels) then
+        self.logger.d("Channel " .. midiMessage.channel .. " not in allowed channels for CC " .. midiMessage.ccNumber)
+        return
+    end
+
+    handler(self, midiMessage)
 end
 
 --- Midi:addControllerConfig(config)
@@ -141,9 +194,9 @@ end
 --- Parameters:
 ---  * config - A table containing the MIDI configuration:
 ---    * name - Name of the MIDI device
----    * channel - (optional) MIDI channel to use (1-16, defaults to 1)
----    * handlers - Table of CC handlers
----    * setInitialValues - (optional) Table of initial CC values
+---    * channels - MIDI channels to listen on (array of 1-16, or "all")
+---    * ccHandlers - Table of CC handlers (function or {handler, channels})
+---    * initialTx - (optional) Table of initial transmit handlers
 ---
 --- Returns:
 ---  * None
@@ -152,9 +205,17 @@ function obj:addControllerConfig(config)
         self.logger.e("Configuration missing device name")
         return
     end
-    self._config = config
 
-    self.logger.i("MIDI Control Loaded: " .. config.name)
+    if not config.channels then
+        self.logger.e("Configuration missing channels")
+        return
+    end
+
+    -- Resolve and store channels internally
+    config._channels = self.utils.resolveChannels(config.channels)
+
+    self._config = config
+    self.logger.i("MIDI Control Loaded: " .. config.name .. " on channels: " .. table.concat(config._channels, ", "))
 end
 
 --- Midi:sendControlChange(midiMessage, deviceName)
@@ -225,22 +286,35 @@ function obj:start()
                 ccValue = metadata.controllerValue,
             }
             self.logger.d("Receive CC: " .. hs.inspect(message))
-            local ccHandler = self._config.ccHandlers[message.ccNumber]
-            if ccHandler then
-                ccHandler(self, message)
-            end
+            self:_handleControlChange(message, self._config)
         end
     end)
 
+    -- Send initial values to controller
     if self._config.initialTx then
-        for ccNumber, txHandler in pairs(self._config.initialTx) do
-            local message = {
-                channel = self._config.channel,
-                ccNumber = ccNumber,
-                ccValue = 0,
-            }
-            self.logger.d("Intial Transmit: " .. hs.inspect(message))
-            txHandler(self, message)
+        for ccNumber, txEntry in pairs(self._config.initialTx) do
+            -- Determine handler and channels (same pattern as ccHandlers)
+            local txHandler, txChannels
+            if type(txEntry) == "function" then
+                txHandler = txEntry
+                txChannels = self._config._channels
+            else
+                txHandler = txEntry.handler
+                txChannels = txEntry.channels
+                    and self.utils.resolveChannels(txEntry.channels)
+                    or self._config._channels
+            end
+
+            -- Send initial value on each configured channel
+            for _, channel in ipairs(txChannels) do
+                local message = {
+                    channel = channel,
+                    ccNumber = ccNumber,
+                    ccValue = 0,
+                }
+                self.logger.d("Initial Transmit: " .. hs.inspect(message))
+                txHandler(self, message)
+            end
         end
     end
 

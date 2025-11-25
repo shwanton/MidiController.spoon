@@ -4,7 +4,7 @@ local obj = {}
 
 obj.name = "Faderfox UC4"
 obj.id = "ff_uc4"
-obj.channel = 2
+obj.channels = {2}
 obj.ccMap = {
     SYSTEM_MUTE = 13,
     SYSTEM_VOLUME = 31,
@@ -53,7 +53,7 @@ function obj:createConfig()
     return {
         name = self.name,
         id = self.id,
-        channel = self.channel,
+        channels = self.channels,
         ccHandlers = {
             [self.ccMap.SYSTEM_VOLUME] = self.receiveSystemVolume,
             [self.ccMap.SYSTEM_MUTE] = self.receiveSystemMute,

@@ -116,11 +116,11 @@ MidiController:setLogLevel('debug')
    print(hs.inspect(hs.midi.devices()))
    ```
 
-3. Set the MIDI channel and CC map:
+3. Set the MIDI channels and CC map:
    ```lua
    obj.name = "Faderfox UC4"  -- Exact name from hs.midi.devices()
    obj.id = "ff_uc4"          -- Short identifier for your code
-   obj.channel = 2            -- MIDI channel to listen on
+   obj.channels = {2}         -- MIDI channels to listen on (array or "all")
    obj.ccMap = {
        SYSTEM_MUTE = 13,      -- CC number for system mute
        SYSTEM_VOLUME = 31,    -- CC number for system volume
@@ -130,14 +130,56 @@ MidiController:setLogLevel('debug')
 4. Implement your CC handlers:
    ```lua
    ccHandlers = {
+       -- Simple handler: listens on all controller channels
        [self.ccMap.SYSTEM_VOLUME] = self.receiveSystemVolume,
-       [self.ccMap.SYSTEM_MUTE] = self.receiveSystemMute,
+
+       -- Handler with channel override: only listens on specific channels
+       [self.ccMap.SYSTEM_MUTE] = {
+           handler = self.receiveSystemMute,
+           channels = {1}  -- Only listen on channel 1
+       },
    },
    ```
 
 5. If your device can receive MIDI, initialize CC values to their correct starting values:
    ```lua
    initialTx = {
+       -- Simple: sends on all controller channels
        [self.ccMap.SYSTEM_VOLUME] = self.transmitSystemVolume,
+
+       -- With channel override: sends only on specific channels
+       [self.ccMap.SYSTEM_MUTE] = {
+           handler = self.transmitSystemMute,
+           channels = {1}
+       },
    },
    ```
+
+## Multi-Channel Configuration
+
+Controllers can listen on multiple MIDI channels:
+
+```lua
+-- Listen on specific channels
+obj.channels = {1, 2, 3}
+
+-- Listen on all 16 MIDI channels
+obj.channels = "all"
+```
+
+Per-handler channel overrides allow different CC numbers to respond to different channels:
+
+```lua
+ccHandlers = {
+    -- CC 31 responds on channels 1 and 2
+    [31] = {
+        handler = self.receiveVolume,
+        channels = {1, 2}
+    },
+    -- CC 13 only responds on channel 1
+    [13] = {
+        handler = self.receiveMute,
+        channels = {1}
+    },
+}
+```
