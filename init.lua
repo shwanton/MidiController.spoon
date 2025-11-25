@@ -82,7 +82,7 @@ obj.utils = {
     --- Resolve a channel configuration to a table of channel numbers
     ---
     --- Parameters:
-    ---  * channelConfig - Either "all", a single number, or a table of numbers
+    ---  * channelConfig - Either "all" or a table of numbers
     ---
     --- Returns:
     ---  * A table of channel numbers (1-16)
